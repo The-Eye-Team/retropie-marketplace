@@ -27,12 +27,14 @@ JS_REP = 0.20
 
 JS_THRESH = 0.75
 
-JS_EVENT_BUTTON = 0x01
-JS_EVENT_AXIS = 0x02
+JS_EVENT_BUTTON = 0x01  # Is the start of every button which is not an arrow-key
+JS_EVENT_AXIS = 0x02  # Is the start of every arrow-key
 JS_EVENT_INIT = 0x80
 
-CONFIG_DIR = '/opt/retropie/configs/'
-RETROARCH_CFG = CONFIG_DIR + 'all/retroarch.cfg'
+CONFIG_DIR = '/opt/retropie/configs/'  # The config-dir for all systems and for retroarch
+RETROARCH_CFG = CONFIG_DIR + 'all/retroarch.cfg'  # Retroarch config file path, later use to check if the cancel and the ok button in the menu swapped
+
+AXIS_BUTTON_DOWN_WAIT = 0.40
 
 def ini_get(key, cfg_file):
     pattern = r'[ |\t]*' + key + r'[ |\t]*=[ |\t]*'
@@ -93,16 +95,15 @@ def get_button_codes(dev_path):
         js_cfg = RETROARCH_CFG
 
     # getting configs for dpad, buttons A, B, X and Y
-    btn_map = [ 'left', 'right', 'up', 'down', 'a', 'b', 'x', 'y', 'r', 'l' ]
+    btn_map = ['left', 'right', 'up', 'down', 'a', 'b', 'x', 'y', 'r', 'l']
     btn_num = {}
     biggest_num = 0
     i = 0
     for btn in list(btn_map):
-        if i > len(dev_button_codes)-1:
+        if i >= len(dev_button_codes):
             break
-        btn_num[btn] = get_btn_num(btn, js_cfg)
         try:
-            btn_num[btn] = int(btn_num[btn])
+            btn_num[btn] = int(get_btn_num(btn, js_cfg))
         except ValueError:
             btn_map.pop(i)
             dev_button_codes.pop(i)
@@ -116,25 +117,31 @@ def get_button_codes(dev_path):
     btn_codes = [''] * (biggest_num + 1)
     i = 0
     for btn in btn_map:
+        if i >= len(dev_button_codes):
+            break
         btn_codes[btn_num[btn]] = dev_button_codes[i]
         i += 1
-        if i >= len(dev_button_codes): break
-
     try:
         # if button A is <enter> and menu_swap_ok_cancel_buttons is true, swap buttons A and B functions
-        if btn_codes[btn_num['a']] == '\n' and ini_get('menu_swap_ok_cancel_buttons', RETROARCH_CFG) == 'true':
+        if (ini_get('menu_swap_ok_cancel_buttons', RETROARCH_CFG) == 'true' and
+           'a' in btn_num and 'b' in btn_num and btn_codes[btn_num['a']] == '\n'):
             btn_codes[btn_num['a']] = btn_codes[btn_num['b']]
             btn_codes[btn_num['b']] = '\n'
-    except:
+    except (IOError, ValueError):
         pass
 
     return btn_codes
 
 def signal_handler(signum, frame):
-    close_fds(js_fds)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    if (js_fds):
+        close_fds(js_fds)
+    if (tty_fd):
+        tty_fd.close()
     sys.exit(0)
 
-def get_hex_chars(key_str):
+def get_hex_chars(key_str):  # decode buttons to the terminal code
     if (key_str.startswith("0x")):
         return key_str[2:].decode('hex')
     else:
@@ -159,7 +166,7 @@ def open_devices():
         try:
             fds.append(os.open(dev, os.O_RDONLY | os.O_NONBLOCK ))
             js_button_codes[fds[-1]] = get_button_codes(dev)
-        except:
+        except (OSError, ValueError):
             pass
 
     return devs, fds
@@ -181,6 +188,8 @@ def read_event(fd):
             return event
 
 def process_event(event):
+    axis_button_down_time = time.time()
+    axis_button_down = None
 
     (js_time, js_value, js_type, js_number) = struct.unpack(event_format, event)
 
@@ -194,37 +203,57 @@ def process_event(event):
         if js_number < len(button_codes) and js_value == 1:
             hex_chars = button_codes[js_number]
 
+            if js_type == 1 and (js_number == 6 or js_number == 7):
+                axis_button_down = hex_chars
+
     if js_type == JS_EVENT_AXIS and js_number <= 7:
         if js_number % 2 == 0:
             if js_value <= JS_MIN * JS_THRESH:
-                hex_chars = axis_codes[0]
+                hex_chars = axis_codes[0]  # left key
             if js_value >= JS_MAX * JS_THRESH:
-                hex_chars = axis_codes[1]
+                hex_chars = axis_codes[1]  # right key
         if js_number % 2 == 1:
             if js_value <= JS_MIN * JS_THRESH:
-                hex_chars = axis_codes[2]
+                hex_chars = axis_codes[2]  # up key
             if js_value >= JS_MAX * JS_THRESH:
-                hex_chars = axis_codes[3]
+                hex_chars = axis_codes[3]  # down key
+        axis_button_down = hex_chars
 
-    if hex_chars:
+    if simulate_button(hex_chars):
+        return True, (axis_button_down, axis_button_down_time)
+
+    return False, (axis_button_down, axis_button_down_time)
+
+def simulate_button(hex_chars):
+    if hex_chars:  # hex_chars = the arrow key
         for c in hex_chars:
             fcntl.ioctl(tty_fd, termios.TIOCSTI, c)
         return True
-
     return False
 
-signal.signal(signal.SIGINT, signal_handler)
+js_fds = []
+tty_fd = []
+
+signal.signal(signal.SIGINT, signal_handler)  # If the signal get terminated, then the signal_handler function getting triggered
+signal.signal(signal.SIGTERM, signal_handler)  # Some other process sending this event, and then the signal_handler function getting triggered
+
+# daemonize when signal handlers are registered
+if os.fork():
+    os._exit(0)
 
 js_button_codes = {}
 button_codes = []
 default_button_codes = []
-axis_codes = []
+axis_codes = []  # Have all axis buttons (arrow-keys) as terminal string
+
+axis_button_down = None
+axis_button_down_time = None
 
 curses.setupterm()
 
 i = 0
-for arg in sys.argv[2:]:
-    chars = get_hex_chars(arg)
+for arg in sys.argv[2:]:  # sys.argv[2:] is the array with the keys from the .sh file: ['kcub1', 'kcuf1', 'kcuu1', 'kcud1', '0x0a', '0x09', '0x20', '0x00', 'knp', 'kpp']
+    chars = get_hex_chars(arg)  # decode the button string into terminal string
     if i < 4:
         axis_codes.append(chars)
 
@@ -235,12 +264,11 @@ event_format = 'IhBB'
 event_size = struct.calcsize(event_format)
 
 try:
-    tty_fd = open('/dev/tty', 'w')
-except:
+    tty_fd = open('/dev/tty', 'a')
+except IOError:
     print 'Unable to open /dev/tty'
     sys.exit(1)
 
-js_fds = []
 rescan_time = time.time()
 while True:
     do_sleep = True
@@ -261,17 +289,30 @@ while True:
             event = read_event(fd)
             if event:
                 do_sleep = False
+
+                if axis_button_down:
+                    if struct.unpack(event_format, event)[1] == 0:
+                        axis_button_down = None
+
                 if time.time() - js_last[i] > JS_REP:
                     if fd in js_button_codes:
                         button_codes = js_button_codes[fd]
                     else:
                         button_codes = default_button_codes
-                    if process_event(event):
+                    isProcess, (axis_button_down, axis_button_down_time) = process_event(event)
+                    if isProcess:
                         js_last[i] = time.time()
+
             elif event == False:
                 close_fds(js_fds)
                 js_fds = []
                 break
+
+            if axis_button_down:
+                current_time = time.time()
+                if (current_time - axis_button_down_time) >= AXIS_BUTTON_DOWN_WAIT:
+                    simulate_button(axis_button_down)
+
             i += 1
 
     if time.time() - rescan_time > 2:

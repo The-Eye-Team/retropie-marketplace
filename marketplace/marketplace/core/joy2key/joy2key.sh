@@ -17,12 +17,20 @@ function start_joy2key() {
         # GAMEPAD-KEYS: 'left', 'right', 'up', 'down', 'a', 'b', 'x', 'y', 'r', 'l'
         # KEYBOARD-KES: 'left', 'right', 'up', 'down', 'return/enter', 'TAB', 'space', '', 'page down', 'page up'
         "$BASEDIR/core/joy2key/joy2key.py" "$JOY2KEY_DEV" kcub1 kcuf1 kcuu1 kcud1 0x0a 0x09 0x20 0x00 knp kpp &
-        JOY2KEY_PID=$!
+
+    # ensure coherency between on-screen prompts and actual button mapping functionality
+    sleep 0.3
     fi
 }
 
 function stop_joy2key() {
+    JOY2KEY_PID=$(pgrep -f joy2key.py)
     if [[ -n "$JOY2KEY_PID" ]]; then
-        kill -INT "$JOY2KEY_PID"
+      if ps -p $JOY2KEY_PID > /dev/null
+      then
+          kill "$JOY2KEY_PID"
+          JOY2KEY_PID=""
+          sleep 1
+      fi
     fi
 }
