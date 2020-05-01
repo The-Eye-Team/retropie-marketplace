@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ -z $3 ]; then
+if [[ -z $3 ]]; then
   LIST_CHOICE=$(dialog --clear \
                         --backtitle "$1" \
                         --title "$1" \
