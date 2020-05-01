@@ -21,8 +21,6 @@ fi
 
 home="$(eval echo ~$user)"
 datadir="$home/RetroPie"
-# biosdir="$datadir/BIOS"
-romdir="$datadir/roms"
 
 marketplacedir="$datadir/marketplace"
 
@@ -71,8 +69,7 @@ marketplace() {
 
   if [ -z "$LIST_CHOICE" ]
   then
-    clear
-    exit
+    exit_app
   else
     SYSTEM="$LIST_CHOICE"
     EM_SYSTEM=`$python_venv $BASEDIR/core/get_stores.py "system_name" "$LIST_CHOICE"`
@@ -99,14 +96,12 @@ marketplace_hostlist() {
 
   if [ $LIST_CHOICE_BUTTON -eq 0 ]; then  # Continue
     if [ -z "$LIST_CHOICE" ]; then
-      clear
-      exit
+      exit_app
     else
       marketplace_get_gameslist
     fi
   elif [ $LIST_CHOICE_BUTTON -eq 1 ]; then  # Cancel
-    clear
-    exit
+    exit_app
   elif [ $LIST_CHOICE_BUTTON -eq 3 ]; then  # Go Back
     clear
     marketplace
@@ -153,8 +148,7 @@ marketplace_show_gameslist() {
        marketplace_download_game
     fi
   elif [ $CHOICE_BUTTON -eq 1 ]; then  # Cancel
-    clear
-    exit
+    exit_app
   elif [ $CHOICE_BUTTON -eq 3 ]; then  # Go Back
     clear
     marketplace_hostlist
@@ -191,6 +185,12 @@ marketplace_restart_emulationstation() {
     pkill -f -e "/opt/retropie/supplementary/.*/emulationstation$"
 }
 
+exit_app() {
+  clear
+  stop_joy2key
+  exit
+}
+
 
 # SEARCH FOR UPDATE
 if [[ "$STORE" == *"search for updates"* ]]; then
@@ -205,4 +205,4 @@ elif [ "$STORE" == "marketplace" ]; then
   marketplace
 fi
 
-clear
+exit_app
