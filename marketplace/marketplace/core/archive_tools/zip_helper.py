@@ -43,10 +43,10 @@ def extract_files(archive, files_to_extract, path_to_extract):
 			o = open(path_to_extract + file, "w+")
 			while True:
 				b = i.read(block_size)
-				current_size += len(b)
-				extracting_dialog.set_progress(current_size)
 				if b == "":
 					break
+				current_size += len(b)
+				extracting_dialog.set_progress(current_size)
 				o.write(b)
 			i.close()
 			o.close()
