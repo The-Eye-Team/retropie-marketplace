@@ -22,6 +22,7 @@ else:
 	print("Could not found the RetroPie-Dir!")
 	exit()
 
+
 # GET FILE-PERMISSION:
 if os.path.isfile(retropie_dir + "/marketplace/runcommand.sh"):
 	file_permission = os.stat(retropie_dir + "/marketplace/runcommand.sh").st_mode
@@ -29,17 +30,12 @@ else:
 	file_permission = None
 
 
-# UPDATE SYSTEM-PACKAGES
-update_system = Popen('sudo apt-get update', shell=True, stdin=PIPE )
-out, err = update_system.communicate()
-print(out)
-
-
 # INSTALL VENV:
 from venv.install_venv import install_venv
 if not install_venv(path + "/marketplace/core/venv/"):
-	print("ERROR on install the virtual environment plus the requirement packages for python!")
+	print("ERROR on install the virtual environment and the required packages for python!")
 	exit()
+
 
 # DELETE OLD MARKETPLACE-FOLDER:
 if os.path.isdir(retropie_dir + "/marketplace"):
